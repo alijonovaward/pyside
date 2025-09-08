@@ -1,42 +1,58 @@
 import sys
-from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QPushButton, QLineEdit
+import threading
+from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QLabel, QTextEdit
+from fastapi import FastAPI, Request
+import uvicorn
 
-class MyApp(QWidget):
+# --- FastAPI qismi ---
+app = FastAPI()
+log_messages = []  # FastAPI va GUI o'rtasida umumiy log
+
+@app.post("/event")
+async def event_listener(request: Request):
+    data = await request.json()
+    message = f"Event kelib tushdi: {data}"
+    log_messages.append(message)
+    return {"status": "ok"}
+
+# --- GUI qismi ---
+class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
+        self.setWindowTitle("PySide6 + FastAPI Demo")
 
-        self.setWindowTitle("Sonni 2 ga ko‘paytirish")
-        self.setGeometry(200, 200, 300, 150)
+        self.layout = QVBoxLayout()
 
-        # Layout
-        layout = QVBoxLayout()
+        self.label = QLabel("Event loglari:")
+        self.text_area = QTextEdit()
+        self.text_area.setReadOnly(True)
 
-        # Input
-        self.input_field = QLineEdit()
-        self.input_field.setPlaceholderText("Son kiriting...")
-        layout.addWidget(self.input_field)
+        self.layout.addWidget(self.label)
+        self.layout.addWidget(self.text_area)
+        self.setLayout(self.layout)
 
-        # Button
-        self.button = QPushButton("Ko‘paytir")
-        self.button.clicked.connect(self.multiply_number)
-        layout.addWidget(self.button)
+        # Timer orqali loglarni tekshirish
+        from PySide6.QtCore import QTimer
+        self.timer = QTimer()
+        self.timer.timeout.connect(self.update_logs)
+        self.timer.start(1000)  # har 1 sekundda yangilaydi
 
-        # Result
-        self.result_label = QLabel("Natija: ")
-        layout.addWidget(self.result_label)
+    def update_logs(self):
+        while log_messages:
+            msg = log_messages.pop(0)
+            self.text_area.append(msg)
 
-        self.setLayout(layout)
-
-    def multiply_number(self):
-        try:
-            num = float(self.input_field.text())  # sonni olamiz
-            result = num * 2
-            self.result_label.setText(f"Natija: {result}")
-        except ValueError:
-            self.result_label.setText("Iltimos, faqat son kiriting!")
+# --- FastAPI serverni boshqa threadda ishga tushirish ---
+def start_fastapi():
+    uvicorn.run(app, host="0.0.0.0", port=8000, log_level="info")
 
 if __name__ == "__main__":
-    app = QApplication(sys.argv)
-    window = MyApp()
+    # FastAPI serverni boshqa threadda ishga tushiramiz
+    server_thread = threading.Thread(target=start_fastapi, daemon=True)
+    server_thread.start()
+
+    # PySide6 GUI
+    qt_app = QApplication(sys.argv)
+    window = MainWindow()
     window.show()
-    sys.exit(app.exec())
+    sys.exit(qt_app.exec())
