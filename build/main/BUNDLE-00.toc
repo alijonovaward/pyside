@@ -1,1 +1,0 @@
-([('main', '/Users/azamjon/Desktop/Pyside/dist/main', 'EXECUTABLE')],)
